@@ -120,10 +120,10 @@ Zero gradients once → loop over micro-batches → `loss = loss / n_batches` �
 
 The most reliable way to avoid wasting resources:
 
-- **Gate everything with a subset parameter.** `max_items=5` before `max_items=5000`. Catch code bugs, config errors, and logic issues on a tiny, fast run.
-- **Maintain a fast test** that exercises the critical path end-to-end in a few seconds. Run it after every change. If it breaks, don't proceed to full scale.
-- **Scale progressively.** 5 items → verify output → 50 items → verify output → full dataset. Each stage gates the next. A bug found at 50 items costs minutes, not hours.
-- **In GPU work**, the analogue is: small synthetic data → medium real subset → full dataset. Validate loss curves and gradient flow at each stage before committing to a multi-hour run.
+- **Estimate runtime before committing to a long run.** Run one or two iterations of the core loop, measure elapsed time, and extrapolate to the full workload. If one unit takes T and you have N units, total is roughly N×T. A 5-second measurement can prevent setting a 10-minute timeout on a 10-hour job.
+- **Gate everything with a subset parameter.** Start with a tiny run that completes in seconds. Catch bugs and config errors before they waste meaningful time.
+- **Maintain a fast test** that exercises the critical path end-to-end. Run it after every change. If it breaks, don't proceed.
+- **Scale progressively, validating both correctness and feasibility at each step.** Small subset → verify output + measure per-unit time → extrapolate total → medium subset → confirm extrapolation holds → full dataset.
 
 ### 5. Fast Paths for Common Cases
 
@@ -261,30 +261,3 @@ The ⚠️ structures are correct only under specific invariants. Without those 
 - **Parallelism without measurement is just complexity.** Don't add threads, async, or multiprocessing without first measuring what the bottleneck actually is. CPU-bound? IO-bound? Memory-bound? The answer determines the fix — guess wrong and you add overhead with no benefit.
 - **Last resort, not first instinct.** Algorithmic improvements (better data structure, caching, batching) usually beat micro-optimizations (inlining, loop unrolling, bit tricks) by orders of magnitude. Try the big wins first.
 
-## Quick Reference
-
-| Constraint | Strategy | Key detail |
-|-----------|----------|------------|
-| CPU-bound | Process pool, start conservative on *free* cores | Check `htop` first, not just `cpu_count` |
-| Memory-bound | Stream/iterate, don't materialize | Check *available* RAM, not total; estimate per-worker |
-| IO-bound | Async + Semaphore gate | Connection pool size = real ceiling |
-| Docker/batch eval | ThreadPool, reuse containers, two-level pools | Start few workers, watch `docker stats`, then scale up |
-| GPU VRAM tight | Gradient accumulation | Zero grad once, backward per micro-batch |
-| GPU timing | sync → clock → run → sync → clock | Without sync you measure launch, not compute |
-| GPU memory | reset_peak → run → max_memory | Subtract baseline, don't use current memory |
-| GPU reproducibility | deterministic=True, benchmark=False, seed all | Slower but identical across runs |
-| Sparse vs dense | Benchmark grid: sizes × densities | Crossover depends on hardware |
-| Sync SDK in async | `asyncio.to_thread()` / `spawn_blocking()` | One blocked await starves the event loop |
-| Pipeline stages | Bounded queue between stages | Automatic backpressure |
-| External API call | Timeout + 2-3 retries (exponential backoff) | Don't retry logic errors |
-| LLM/embedding batch calls | Batch input, prompt cache, pre-compute to reuse | One batched call > N individual calls |
-| Before scaling | Subset run → verify → medium → verify → full | Fast test catches regressions in seconds |
-| Lock contention (read-mostly) | RCU or single-owner fast path | Skip lock when atomic flag says "nothing to do" |
-| Ring buffer | Power-of-two capacity | Modulo = bitmask |
-| Compile-time | LTO + single codegen unit | 2-10% faster, 2-3× slower compile |
-| Write-heavy storage | LSM-tree | Random writes → sequential I/O |
-| Script might be re-run | `if os.path.exists(out): return` | One line, makes pipeline idempotent |
-| Batch processing | Track processed IDs, save after each item | Resume = skip already-done items |
-| Long workflow stages | Checkpoint at stage boundaries | JSON/DB row with step + artifacts + pending jobs |
-| Failure recovery | Auto-retry → checkpoint-resume → skip → manual | Escalate by retry count and error type |
-| Process might die | DB-backed queue + lease per item | Survives restart, no double-execution |

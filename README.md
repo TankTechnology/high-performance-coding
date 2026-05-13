@@ -4,12 +4,23 @@ A Claude Code skill encoding universal high-performance computing principles. Wh
 
 ## Install
 
+Via ClawHub:
+
 ```bash
-# Install as a Claude Code skill
-cp -r high-performance-coding ~/.claude/skills/
+clawhub install high-performance-coding
 ```
 
-Or install via plugin marketplace (once published).
+Or with OpenClaw:
+
+```bash
+openclaw skills install high-performance-coding
+```
+
+Manual install:
+
+```bash
+git clone --depth 1 https://github.com/TankTechnology/high-performance-coding.git ~/.claude/skills/high-performance-coding
+```
 
 ## What It Covers
 
